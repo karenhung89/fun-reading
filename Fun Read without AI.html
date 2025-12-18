@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>趣味魔法阅读 - 图像增强版</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pinyin Pro -->
+    <script src="https://unpkg.com/pinyin-pro"></script>
+    <!-- html2canvas -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <!-- Tesseract.js v5 -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- 打印样式 --- */
+        @media print {
+            @page { margin: 1cm; size: A4; }
+            body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            header, #step-input, #step-mode, .control-bar, footer, .btn-cartoon, #audio-container, #ocr-loader, dialog, .rhythm-ball, #action-overlay, #accessibility-bar { display: none !important; }
+            main { box-shadow: none !important; border: none !important; padding: 0 !important; width: 100% !important; max-width: 100% !important; }
+            #game-area, #game-container-wrapper, #game-board {
+                display: block !important; visibility: visible !important; position: relative !important;
+                top: 0 !important; left: 0 !important; width: 100% !important; height: auto !important;
+                min-height: 0 !important; overflow: visible !important; background: white !important;
+            }
+            .notebook-paper { background-image: none !important; border: 1px solid #ddd; }
+            .puzzle-piece { border: 2px solid #000 !important; color: #000 !important; box-shadow: none !important; }
+            .puzzle-slot { border-bottom: 2px solid #000 !important; }
+            .emoji-item { filter: grayscale(0%) !important; }
+            #game-container-wrapper::before {
+                content: "魔法阅读练习单"; display: block; text-align: center;
+                font-family: "KaiTi", serif; font-size: 20pt; font-weight: bold; margin-bottom: 20px; color: #000;
+            }
+        }
+
+        /* --- 全局样式 --- */
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #fffbeb; 
+            background-image: 
+                radial-gradient(#fbbf24 15%, transparent 16%),
+                radial-gradient(#fbbf24 15%, transparent 16%);
+            background-size: 24px 24px;
+            background-position: 0 0, 12px 12px;
+            user-select: none;
+            overflow-x: hidden;
+            transition: background 0.5s;
+        }
+
+        h1, h2, h3, .cartoon-font, .btn-cartoon { font-family: 'ZCOOL KuaiLe', cursive; }
+        .game-font { font-family: "KaiTi", "STKaiti", "楷体", serif; }
+
+        .btn-cartoon {
+            transition: all 0.1s;
+            box-shadow: 0px 4px 0px 0px rgba(0,0,0,0.2);
+            transform: translateY(0);
+        }
+        .btn-cartoon:active {
+            transform: translateY(4px);
+            box-shadow: 0px 0px 0px 0px rgba(0,0,0,0.2);
+        }
+
+        .notebook-paper {
+            background-color: #fff;
+            background-image: linear-gradient(#e5e7eb 1px, transparent 1px);
+            background-size: 100% 3rem; 
+            padding-top: 2rem; 
+            transition: all 0.3s;
+        }
+
+        .char-unit {
+            display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-end;
+            margin: 0.25rem; transition: all 0.3s; vertical-align: bottom; position: relative;
+            padding-top: 1.8rem; cursor: pointer;
+        }
+        .char-unit:hover { transform: scale(1.1); }
+        .pinyin { font-size: 1rem; color: #ef4444; font-weight: bold; height: 1.4rem; margin-bottom: 0.3rem; font-family: Arial, sans-serif; }
+        .hanzi { font-size: 3rem; line-height: 1; color: #1f2937; padding: 0 2px; transition: color 0.1s; }
+        .vanished { opacity: 0.1; }
+
+        /* 特教模式覆盖 */
+        body.zen-mode { background-color: #f3f4f6 !important; background-image: none !important; }
+        body.zen-mode .btn-cartoon { box-shadow: none !important; border: 1px solid #9ca3af !important; transform: none !important; background-color: #fff !important; color: #374151 !important; }
+        body.dyslexia-mode .game-font, body.dyslexia-mode .hanzi { font-family: "Noto Sans SC", sans-serif !important; font-weight: bold; }
+        body.dyslexia-mode .char-unit { margin: 0.5rem 1.2rem !important; }
+
+        .touch-active .hanzi { color: #d97706; text-shadow: 0 0 10px #fcd34d; transform: scale(1.2); }
+        .touch-active .pinyin { visibility: visible !important; color: #d97706; }
+
+        /* OCR Loader */
+        #ocr-loader {
+            position: absolute; inset: 0; background: rgba(255,255,255,0.95);
+            display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 50;
+            text-align: center; padding: 20px;
+        }
+
+        .puzzle-slot{width:3.5rem;height:3.5rem;border-bottom:4px dashed #cbd5e1;margin:0.5rem;display:inline-flex;align-items:center;justify-content:center}
+        .puzzle-piece{position:relative;background-color:#fff;border:2px solid #f97316;border-radius:12px;padding:.5rem 1rem;font-size:2rem;color:#4b5563;box-shadow:0 4px 0 #ea580c;cursor:pointer;margin:.5rem;display:inline-block;transition:all .2s;font-family:"KaiTi",serif;min-width:3.5rem}
+        .puzzle-piece:active{transform:translateY(4px);box-shadow:0 0 0 #ea580c}.puzzle-piece.used{opacity:.4;transform:scale(.9);pointer-events:none;box-shadow:none;background-color:#e5e7eb;border-color:#d1d5db}
+        .puzzle-tag{position:absolute;top:-8px;left:-8px;background-color:#3b82f6;color:white;border-radius:50%;width:20px;height:20px;font-size:12px;font-weight:bold;font-family:sans-serif;display:flex;align-items:center;justify-content:center;border:2px solid white}
+        .rain-drop{position:absolute;font-family:"KaiTi",serif;font-weight:bold;color:#1d4ed8;cursor:pointer;user-select:none;text-shadow:2px 2px 0px rgba(255,255,255,.8);z-index:50;padding:15px;border-radius:50%;background:rgba(255,255,255,.4);backdrop-filter:blur(2px);box-shadow:0 4px 6px rgba(0,0,0,.1);transition:transform .1s,background .2s}
+        .rain-drop:active{transform:scale(1.2);background:rgba(255,255,255,.8)}.rain-drop.wrong-hit{animation:shake .5s;background:rgba(239,68,68,.8);color:white}
+        .target-panel{background:linear-gradient(135deg,#6366f1 0,#a855f7 100%);color:white;border-radius:16px;box-shadow:0 -4px 10px rgba(0,0,0,.1);z-index:40}
+        .spotlight-container{background:linear-gradient(to bottom,#38bdf8,#bae6fd);position:relative;overflow:hidden}
+        .cloud-char{position:relative;display:inline-flex;justify-content:center;align-items:center;width:100px;height:60px;background:#fff;border-radius:100px;margin:20px;cursor:pointer;transition:all .3s ease;animation:float 6s ease-in-out infinite;filter:drop-shadow(0 4px 3px rgba(0,0,0,.1))}
+        .cloud-char::after{content:'';position:absolute;background:#fff;z-index:0;width:40px;height:40px;top:-20px;left:15px;border-radius:50%}.cloud-char::before{content:'';position:absolute;background:#fff;z-index:0;width:50px;height:50px;top:-25px;right:15px;border-radius:50%}
+        .cloud-text{font-family:"KaiTi",serif;font-size:2.5rem;color:#64748b;z-index:10;position:relative;transition:color .3s}.cloud-char.spotlight-active{animation:pulse-glow .8s infinite alternate ease-in-out!important;z-index:100}
+        .cloud-char.spotlight-active .cloud-text{color:#d97706;text-shadow:0 0 2px #fff;font-weight:bold}.cloud-char.spotlight-done{opacity:0;transform:scale(0) rotate(180deg);pointer-events:none;transition:all .6s ease-out}
+        .rhythm-ball{position:absolute;width:24px;height:24px;background:#ef4444;border-radius:50%;border:2px solid white;box-shadow:0 4px 6px rgba(0,0,0,.3);z-index:100;pointer-events:none;display:none;transition:left linear}
+        .ball-jumping{animation-name:ball-jump-arc;animation-timing-function:cubic-bezier(.45,.05,.55,.95);animation-iteration-count:1}.hanzi.rhythm-hit{color:#d97706!important;text-shadow:0 0 5px #fcd34d;transform:scale(1.1)}
+        
+        #action-overlay{position:absolute;inset:0;background:rgba(255,255,255,.95);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:200}
+        #action-overlay.active{display:flex!important;animation:popIn .3s cubic-bezier(.175,.885,.32,1.275)}
+        .emoji-item{cursor:pointer;transition:transform .2s;font-family:"Segoe UI Emoji",sans-serif}.emoji-item:hover{transform:scale(1.2) rotate(10deg)}
+        @keyframes float{0%{transform:translateY(0)}50%{transform:translateY(-10px)}100%{transform:translateY(0)}}
+        @keyframes ball-jump-arc{0%{transform:translateY(0) scaleX(1.1) scaleY(.9)}10%{transform:translateY(0) scaleX(1) scaleY(1)}50%{transform:translateY(-35px)}90%{transform:translateY(0) scaleX(1) scaleY(1)}100%{transform:translateY(0) scaleX(1.1) scaleY(.9)}}
+        @keyframes popIn{0%{transform:scale(.5);opacity:0}100%{transform:scale(1);opacity:1}}
+        @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+        .action-icon{font-size:8rem;margin-bottom:2rem;animation:bounce 1s infinite}.action-text{font-size:4rem;font-family:'ZCOOL KuaiLe',cursive;color:#ea580c;text-shadow:2px 2px 0 #fff}
+    </style>
+</head>
+<body class="min-h-screen p-4 flex flex-col items-center">
+
+    <!-- ♿️ 特教辅助工具栏 -->
+    <div id="accessibility-bar" class="w-full max-w-6xl flex justify-end gap-2 mb-2 px-2">
+        <button onclick="toggleZenMode()" id="btn-zen" class="text-gray-400 hover:text-gray-700 bg-white/50 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 transition"><i class="fa-solid fa-spa"></i> 禅模式</button>
+        <button onclick="toggleDyslexiaMode()" id="btn-dyslexia" class="text-gray-400 hover:text-orange-700 bg-white/50 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 transition"><i class="fa-solid fa-book-open-reader"></i> 乐读模式</button>
+    </div>
+
+    <header class="mb-4 text-center w-full max-w-4xl flex items-center justify-center relative">
+        <h1 class="text-4xl md:text-5xl text-orange-500 drop-shadow-md cartoon-font"><i class="fa-solid fa-shapes text-green-400 mr-2"></i>趣味魔法阅读</h1>
+        <button onclick="location.reload()" class="absolute right-0 top-1 text-gray-400 hover:text-orange-400 text-sm font-bold"><i class="fa-solid fa-rotate-right"></i> 重置</button>
+    </header>
+
+    <main class="w-full max-w-6xl bg-white/95 rounded-3xl shadow-2xl p-4 md:p-6 border-4 border-orange-100 transition-all" id="main-container">
+        
+        <!-- STEP 1: 输入区 (更新版) -->
+        <section id="step-input" class="transition-all duration-500">
+            <div class="flex flex-wrap justify-between items-end mb-2 gap-2">
+                <label class="text-xl font-bold text-gray-600 cartoon-font"><span class="inline-block bg-yellow-400 text-white w-6 h-6 rounded-full text-center leading-6 mr-1">1</span>准备课文</label>
+                <div class="flex flex-wrap gap-2">
+                    <!-- 文件上传 (相机/相册) -->
+                    <input type="file" id="ocr-upload" class="hidden" accept="image/*" onchange="handleImageUpload(this)">
+                    <button onclick="document.getElementById('ocr-upload').click()" class="btn-cartoon bg-sky-400 hover:bg-sky-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sky-200">
+                        <i class="fa-solid fa-camera mr-1"></i> 上传图片/扫描
+                    </button>
+                    <button onclick="clearInput()" class="btn-cartoon bg-rose-400 hover:bg-rose-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold">
+                        <i class="fa-solid fa-trash mr-1"></i> 清空
+                    </button>
+                </div>
+            </div>
+
+            <div class="relative">
+                <textarea id="text-input" class="w-full h-40 border-2 border-orange-200 rounded-xl p-4 text-xl game-font text-gray-700 focus:outline-none focus:border-orange-400 resize-none bg-orange-50/30" placeholder="拍照、上传图片，或者直接输入文字...">我的鱼，
+你的牙。
+他的雨衣。
+大大的眼睛。</textarea>
+                
+                <!-- OCR Loader -->
+                <div id="ocr-loader" class="hidden absolute inset-0 bg-white/90 rounded-xl flex-col items-center justify-center z-50">
+                    <i class="fa-solid fa-spinner fa-spin text-5xl text-sky-500 mb-4"></i>
+                    <p class="text-sky-600 font-bold text-xl cartoon-font mt-4" id="ocr-status">正在启动识字引擎...</p>
+                    <p class="text-gray-500 text-sm mt-2">正在自动增强图片对比度...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 2: 模式选择 -->
+        <section id="step-mode" class="mt-6">
+            <label class="text-xl font-bold text-gray-600 cartoon-font mb-3 block"><span class="inline-block bg-yellow-400 text-white w-6 h-6 rounded-full text-center leading-6 mr-1">2</span>选择玩法</label>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                <div onclick="initGame('touch')" class="cursor-pointer bg-orange-50 border-2 border-orange-100 hover:border-orange-300 rounded-xl p-2 flex flex-col items-center gap-1 transition hover:-translate-y-1 text-center"><div class="text-3xl">👆</div><h3 class="text-sm font-bold text-orange-600 cartoon-font">点读模式</h3></div>
+                <div onclick="initGame('vanishing')" class="cursor-pointer bg-blue-50 border-2 border-blue-100 hover:border-blue-300 rounded-xl p-2 flex flex-col items-center gap-1 transition hover:-translate-y-1 text-center"><div class="text-3xl">👻</div><h3 class="text-sm font-bold text-blue-600 cartoon-font">消失模式</h3></div>
+                <div onclick="initGame('emoji')" class="cursor-pointer bg-purple-50 border-2 border-purple-100 hover:border-purple-300 rounded-xl p-2 flex flex-col items-center gap-1 transition hover:-translate-y-1 text-center"><div class="text-3xl">🧩</div><h3 class="text-sm font-bold text-purple-600 cartoon-font">Emoji猜字</h3></div>
+                <div onclick="initGame('puzzle')" class="cursor-pointer bg-green-50 border-2 border-green-100 hover:border-green-300 rounded-xl p-2 flex flex-col items-center gap-1 transition hover:-translate-y-1 text-center"><div class="text-3xl">🧱</div><h3 class="text-sm font-bold text-green-600 cartoon-font">句子拼图</h3></div>
+                <div onclick="initGame('rain')" class="cursor-pointer bg-sky-50 border-2 border-sky-100 hover:border-sky-300 rounded-xl p-2 flex flex-col items-center gap-1 transition hover:-translate-y-1 text-center"><div class="text-3xl">🌧️</div><h3 class="text-sm font-bold text-sky-600 cartoon-font">拼音接雨</h3></div>
+                <div onclick="initGame('spotlight')" class="cursor-pointer bg-amber-50 border-2 border-amber-100 hover:border-amber-300 rounded-xl p-2 flex flex-col items-center gap-1 transition hover:-translate-y-1 text-center"><div class="text-3xl">🔦</div><h3 class="text-sm font-bold text-amber-600 cartoon-font">聚光灯</h3></div>
+                <div onclick="initGame('rhythm')" class="cursor-pointer bg-red-50 border-2 border-red-100 hover:border-red-300 rounded-xl p-2 flex flex-col items-center gap-1 transition hover:-translate-y-1 text-center"><div class="text-3xl">🥁</div><h3 class="text-sm font-bold text-red-600 cartoon-font">节奏弹球</h3></div>
+            </div>
+        </section>
+
+        <!-- STEP 3: 游戏区域 -->
+        <section id="game-area" class="hidden mt-6">
+            <div class="control-bar sticky top-2 z-20 bg-white/90 backdrop-blur border-2 border-gray-200 rounded-2xl p-2 mb-4 shadow-lg flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="exitGame()" class="btn-cartoon bg-gray-200 text-gray-500 w-10 h-10 rounded-xl font-bold text-lg" title="返回"><i class="fa-solid fa-arrow-left"></i></button>
+
+                    <!-- Contextual Controls -->
+                    <div id="controls-touch" class="hidden flex items-center gap-2 bg-orange-50 px-3 py-1 rounded-xl"><span class="text-xs font-bold text-orange-600">点击汉字朗读</span></div>
+                    <div id="controls-vanishing" class="hidden flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-xl"><span class="text-xs font-bold text-blue-400">速度</span><input type="range" id="global-speed-slider" min="1" max="10" value="5" class="w-24 h-2 bg-blue-200 rounded-lg accent-blue-600" oninput="handleSpeedChange(this.value)"></div>
+                    <div id="controls-emoji" class="hidden flex items-center gap-2 bg-purple-50 px-3 py-1 rounded-xl w-32 md:w-48"><span class="text-xs font-bold text-purple-400">数量</span><input type="range" id="emoji-slider" min="20" max="90" value="50" class="w-full accent-purple-500 h-2 bg-gray-200 rounded-lg" onchange="renderEmoji()"></div>
+                    <div id="controls-puzzle" class="hidden flex items-center gap-2 bg-green-50 px-3 py-1 rounded-xl"><span class="text-sm font-bold text-green-600" id="puzzle-progress">1 / 5</span></div>
+                    <div id="controls-rain" class="hidden flex items-center gap-2 bg-sky-50 px-3 py-1 rounded-xl"><i class="fa-solid fa-droplet text-blue-400 text-xs"></i><input type="range" id="rain-speed-slider" min="1" max="8" value="3" class="w-20 h-2 bg-blue-200 rounded-lg accent-blue-600" oninput="updateRainSpeed(this.value)"><span class="w-px h-4 bg-blue-200 mx-1"></span><span class="text-xs font-bold text-sky-600">得分:</span><span id="rain-score" class="text-lg font-bold text-orange-500">0</span></div>
+                    <div id="controls-spotlight" class="hidden flex items-center gap-2 bg-amber-50 px-3 py-1 rounded-xl"><span class="text-xs font-bold text-amber-600">点击发光的云朵!</span></div>
+                    <div id="controls-rhythm" class="hidden flex items-center gap-2 bg-red-50 px-3 py-1 rounded-xl"><span class="text-xs font-bold text-red-600">速度:</span><input type="range" id="rhythm-bpm" min="30" max="150" value="60" class="w-20 h-2 bg-red-200 rounded-lg accent-red-600" oninput="updateRhythmSpeed(this.value)"><button onclick="toggleRhythmSound()" id="btn-rhythm-sound" class="text-red-500 hover:text-red-700 ml-1" title="切换音效"><i class="fa-solid fa-drum"></i></button><button onclick="toggleActionBreak()" id="btn-action-break" class="btn-cartoon bg-green-500 text-white px-2 py-1 rounded-lg text-xs font-bold ml-1" title="动感课间"><i class="fa-solid fa-person-running"></i></button></div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="showHelp()" class="btn-cartoon bg-teal-100 text-teal-600 px-3 py-2 rounded-xl font-bold text-lg" title="玩法说明"><i class="fa-solid fa-circle-question"></i></button>
+                    <button id="btn-download" onclick="downloadWorksheet()" class="hidden btn-cartoon bg-rose-100 text-rose-600 px-3 py-2 rounded-xl font-bold text-lg" title="保存图片"><i class="fa-solid fa-image"></i></button>
+                    <button id="btn-word" onclick="downloadAsWord()" class="hidden btn-cartoon bg-sky-100 text-sky-600 px-3 py-2 rounded-xl font-bold text-lg" title="下载 Word"><i class="fa-solid fa-file-word"></i></button>
+                    <button id="btn-print" onclick="window.print()" class="hidden btn-cartoon bg-cyan-100 text-cyan-600 px-3 py-2 rounded-xl font-bold text-lg" title="打印"><i class="fa-solid fa-print"></i></button>
+                    <button onclick="togglePinyin()" id="btn-pinyin" class="hidden btn-cartoon bg-indigo-100 text-indigo-600 px-3 py-2 rounded-xl font-bold text-sm">拼音</button>
+                    <button onclick="toggleRecord()" id="btn-record" class="btn-cartoon bg-yellow-100 text-yellow-700 hover:bg-yellow-200 px-3 py-2 rounded-xl font-bold text-sm flex items-center gap-2"><i class="fa-solid fa-microphone"></i></button>
+                    <button id="btn-go" onclick="handleGoAction()" class="hidden btn-cartoon bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-xl text-xl font-bold cartoon-font shadow-lg flex items-center gap-2"><i class="fa-solid fa-play"></i> 开始</button>
+                    <button id="btn-refresh" onclick="renderEmoji()" class="hidden btn-cartoon bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-xl font-bold cartoon-font"><i class="fa-solid fa-rotate"></i> 换一批</button>
+                    <button id="btn-next-puzzle" onclick="nextPuzzle()" class="hidden btn-cartoon bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl font-bold cartoon-font">下一句 <i class="fa-solid fa-arrow-right"></i></button>
+                    <button id="btn-spotlight-skip" onclick="nextSpotlightTarget()" class="hidden btn-cartoon bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-bold cartoon-font">跳过 <i class="fa-solid fa-forward"></i></button>
+                </div>
+            </div>
+
+            <div id="audio-container" class="hidden mb-2 px-2"><audio id="audio-player" controls class="w-full h-8"></audio></div>
+            <div id="game-container-wrapper" class="relative bg-white border border-gray-300 rounded-b-xl min-h-[450px] shadow-inner overflow-hidden">
+                <div id="game-board" class="w-full h-full min-h-[450px] relative"></div>
+                <div id="rhythm-ball" class="rhythm-ball"></div>
+                <div id="action-overlay" class="hidden absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center pointer-events-none"><div id="action-icon" class="text-8xl mb-4 animate-bounce">👏</div><div id="action-text" class="text-5xl font-bold text-orange-500 cartoon-font">拍拍手</div></div>
+                <div id="rain-target-bar" class="hidden absolute bottom-4 left-1/2 transform -translate-x-1/2 w-3/4 target-panel flex flex-col items-center justify-center py-2 px-6 transition-all duration-300"><div class="text-xs text-indigo-200 uppercase tracking-wider font-bold">请点击:</div><div id="target-pinyin" class="text-3xl font-bold font-mono tracking-widest text-yellow-300">huā</div></div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="mt-8 text-yellow-600/60 font-bold text-xs cartoon-font mb-4">Powered by Tesseract.js 📷</footer>
+
+    <!-- Help Dialog -->
+    <dialog id="help-dialog" class="p-6 rounded-2xl border-4 border-teal-200 shadow-xl backdrop:bg-black/30 w-full max-w-md">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-2xl font-bold text-teal-600 cartoon-font"><i class="fa-solid fa-book-open mr-2"></i>玩法说明</h3>
+            <button onclick="toggleHelpAudio()" id="btn-read-help" class="text-teal-500 hover:text-teal-700 text-xl" title="朗读说明">
+                <i class="fa-solid fa-volume-high"></i>
+            </button>
+        </div>
+        <p id="help-content" class="text-lg text-gray-700 leading-relaxed mb-6"></p>
+        <div class="flex justify-end">
+            <button onclick="closeHelp()" class="btn-cartoon bg-teal-500 text-white px-6 py-2 rounded-lg font-bold">明白啦!</button>
+        </div>
+    </dialog>
+
+    <script>
+        // --- Config ---
+        let currentMode = '', pinyinVisible = true, actionBreakEnabled = true, vanishingTimer = null, vanishingIntervalMs = 1000;
+        let isRunning = false, isRecording = false, mediaRecorder = null, audioChunks = [], helpUtterance = null;
+        let puzzleSentences = [], currentPuzzleIndex = 0, currentPuzzleAnswer = [], rainInterval = null, rainScore = 0, rainWords = [], rainSpeed = 3, animationFrameId = null, currentRainTarget = null, currentSpotlightTarget = null;
+        let rhythmBPM = 60, rhythmIndex = 0, rhythmTimer = null, rhythmSoundType = 1, audioCtx = null, rhythmCurrentLine = -1;
+        const emojiDict = { '老师': '👩‍🏫', '医生': '👨‍⚕️', '奶奶': '👵', '爷爷': '👴', '爸爸': '👨', '妈妈': '👩', '哥哥': '👦', '姐姐': '👧', '弟弟': '👶', '妹妹': '👧', '同学': '🎒', '朋友': '🤝', '学生': '🧑‍🎓', '太阳': '☀️', '月亮': '🌙', '星星': '⭐', '下雨': '🌧️', '下雪': '❄️', '刮风': '🍃', '彩虹': '🌈', '苹果': '🍎', '香蕉': '🍌', '西瓜': '🍉', '葡萄': '🍇', '牛奶': '🥛', '面包': '🍞', '米饭': '🍚', '面条': '🍜', '飞机': '✈️', '汽车': '🚗', '火车': '🚂', '轮船': '🚢', '足球': '⚽', '篮球': '🏀', '眼睛': '👀', '耳朵': '👂', '鼻子': '👃', '嘴巴': '👄', '头发': '💇', '老虎': '🐯', '狮子': '🦁', '大象': '🐘', '熊猫': '🐼', '兔子': '🐰', '雨衣': '🧥', '大树': '🌳', '公园': '🏞️', '人': '🧑', '男': '👨', '女': '👩', '孩': '👶', '童': '🧒', '我': '🙋', '你': '🫵', '他': '👦', '她': '👧', '它': '🐾', '爸': '👨', '父': '👨', '妈': '👩', '母': '👩', '爷': '👴', '奶': '👵', '哥': '👦', '姐': '👧', '弟': '👶', '妹': '👧', '师': '👩‍🏫', '生': '🎒', '友': '🤝', '王': '👑', '兵': '💂', '头': '🗣️', '目': '👁️', '眼': '👀', '口': '👄', '嘴': '👄', '耳': '👂', '鼻': '👃', '手': '✋', '足': '🦶', '脚': '🦶', '心': '❤️', '牙': '🦷', '舌': '👅', '骨': '🦴', '血': '🩸', '脸': '😊', '面': '😐', '身': '🧍', '发': '💇', '鼠': '🐭', '牛': '🐮', '虎': '🐯', '兔': '🐰', '龙': '🐲', '蛇': '🐍', '马': '🐴', '羊': '🐑', '猴': '🐵', '鸡': '🐔', '狗': '🐶', '猪': '🐷', '猫': '🐱', '鸟': '🐦', '鱼': '🐟', '虫': '🐛', '蚁': '🐜', '蜂': '🐝', '蝶': '🦋', '蛙': '🐸', '龟': '🐢', '熊': '🐻', '象': '🐘', '狮': '🦁', '鹅': '🦢', '鸭': '🦆', '狼': '🐺', '猫': '🐼', '鹿': '🦌', '鹰': '🦅', '虾': '🦐', '蟹': '🦀', '贝': '🐚', '兽': '🐾', '天': '🌌', '地': '🌍', '日': '☀️', '月': '🌙', '星': '⭐', '光': '✨', '云': '☁️', '风': '🍃', '雨': '🌧️', '雪': '❄️', '雷': '⚡', '虹': '🌈', '山': '⛰️', '石': '🪨', '土': '🟫', '田': '🌾', '水': '💧', '火': '🔥', '木': '🪵', '林': '🌲', '森': '🌳', '花': '🌸', '草': '🌿', '叶': '🍃', '竹': '🎋', '果': '🍎', '瓜': '🍉', '桃': '🍑', '梨': '🍐', '杏': '✴️', '春': '🌱', '夏': '☀️', '秋': '🍂', '冬': '☃️', '海': '🌊', '江': '〰️', '河': '〰️', '家': '🏠', '校': '🏫', '店': '🏪', '门': '🚪', '窗': '🪟', '床': '🛏️', '桌': '🪑', '椅': '🪑', '灯': '💡', '钟': '⏰', '表': '⌚', '伞': '☂️', '书': '📖', '本': '📒', '笔': '✏️', '尺': '📏', '包': '🎒', '刀': '🔪', '衣': '👕', '裤': '👖', '鞋': '👟', '帽': '🧢', '裙': '👗', '袜': '🧦', '车': '🚗', '船': '🚢', '机': '✈️', '钱': '💰', '球': '⚽', '药': '💊', '礼': '🎁', '信': '✉️', '图': '🖼️', '网': '🌐', '饭': '🍚', '面': '🍜', '肉': '🥩', '蛋': '🥚', '奶': '🥛', '菜': '🥬', '茶': '🍵', '酒': '🍷', '糖': '🍬', '盐': '🧂', '饼': '🍪', '糕': '🍰', '冰': '🧊', '汤': '🍲', '吃': '🍽️', '喝': '🥤', '睡': '💤', '梦': '💭', '跑': '🏃', '跳': '🦘', '走': '🚶', '坐': '🧘', '站': '🧍', '看': '👀', '见': '👁️', '听': '👂', '说': '💬', '讲': '🗣️', '唱': '🎤', '写': '✍️', '画': '🎨', '飞': '✈️', '游': '🏊', '爱': '❤️', '喜': '🥰', '笑': '😄', '哭': '😭', '想': '🤔', '打': '👊', '拍': '👏', '抱': '🫂', '亲': '😚', '问': '❓', '开': '🔓', '关': '🔒', '买': '🛒', '卖': '🤝', '来': '🔙', '去': '🔜', '大': '🐘', '小': '🐜', '多': '🌲', '少': '🌱', '高': '🦒', '矮': '🐁', '长': '📏', '短': '➖', '快': '🐆', '慢': '🐌', '好': '👍', '坏': '👎', '美': '💃', '丑': '👹', '冷': '🥶', '热': '🥵', '新': '✨', '旧': '🕸️', '对': '✅', '错': '❌', '红': '🔴', '黄': '🟡', '蓝': '🔵', '绿': '🟢', '白': '⚪', '黑': '⚫', '上': '⬆️', '下': '⬇️', '左': '⬅️', '右': '➡️', '中': '🎯' };
+
+        // --- Core Functions ---
+        function clearInput() { document.getElementById('text-input').value = ""; }
+        function mockOCR() { document.getElementById('text-input').value = "床前明月光，\n疑是地上霜。\n举头望明月，\n低头思故乡。"; }
+
+        // --- OCR Logic (Tesseract v5) ---
+        async function handleImageUpload(input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const loader = document.getElementById('ocr-loader');
+                const status = document.getElementById('ocr-status');
+                
+                loader.style.display = 'flex';
+                status.textContent = "正在加载识字引擎...";
+                
+                // Preprocessing
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = async function() {
+                        // Create canvas for preprocessing
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = img.width; canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // Simple Binarization/Contrast Enhancement logic could go here
+                        // For now, passing canvas dataURL to Tesseract
+                        const processedImage = canvas.toDataURL('image/jpeg');
+
+                        try {
+                            const worker = await Tesseract.createWorker('chi_sim', 1, {
+                                logger: m => {
+                                    if(m.status === 'recognizing text') status.textContent = `正在识别... ${(m.progress * 100).toFixed(0)}%`;
+                                    else status.textContent = m.status;
+                                }
+                            });
+                            const { data: { text } } = await worker.recognize(processedImage);
+                            const cleanText = text.replace(/ /g, '').replace(/\n\s*\n/g, '\n');
+                            document.getElementById('text-input').value = cleanText;
+                            await worker.terminate();
+                        } catch (err) {
+                            alert("识别失败，请重试。");
+                            console.error(err);
+                        } finally {
+                            loader.style.display = 'none';
+                            input.value = '';
+                        }
+                    }
+                    img.src = e.target.result;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // --- Mode Init ---
+        function initGame(mode) {
+            const text = document.getElementById('text-input').value.trim();
+            if(!text) { alert("请先输入或扫描文字哦！"); return; }
+            currentMode = mode;
+            document.getElementById('step-input').classList.add('hidden');
+            document.getElementById('step-mode').classList.add('hidden');
+            document.getElementById('game-area').classList.remove('hidden');
+            const overlay = document.getElementById('action-overlay'); overlay.classList.remove('active'); overlay.style.display = 'none';
+
+            const controls = ['controls-vanishing', 'controls-emoji', 'controls-puzzle', 'controls-rain', 'controls-spotlight', 'controls-rhythm', 'controls-rhythm-extra', 'controls-rain-extra', 'controls-touch', 'btn-go', 'btn-refresh', 'btn-next-puzzle', 'btn-pinyin', 'btn-spotlight-skip', 'btn-print', 'btn-download', 'btn-word', 'rain-target-bar'];
+            controls.forEach(id => { const el = document.getElementById(id); if(el) el.classList.add('hidden'); });
+
+            const slider = document.getElementById('global-speed-slider'); slider.disabled = false; slider.parentElement.classList.add('hidden'); 
+
+            if (mode === 'touch') {
+                ['controls-touch'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('hidden'); });
+                renderTouchSetup(text);
+            } else if (mode === 'vanishing') {
+                slider.parentElement.classList.remove('hidden'); slider.value = 5; vanishingIntervalMs = 1000;
+                ['controls-vanishing', 'btn-go', 'btn-pinyin'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('hidden'); });
+                renderVanishing(text);
+            } else if (mode === 'emoji') {
+                ['controls-emoji', 'btn-refresh', 'btn-print', 'btn-download', 'btn-word'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('hidden'); });
+                renderEmoji(text);
+            } else if (mode === 'puzzle') {
+                ['controls-puzzle', 'btn-next-puzzle', 'btn-print', 'btn-download', 'btn-word'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('hidden'); });
+                initPuzzle(text);
+            } else if (mode === 'rain') {
+                slider.parentElement.classList.remove('hidden'); slider.value = 3; rainSpeed = 3;
+                ['controls-rain', 'controls-rain-extra', 'btn-go', 'rain-target-bar'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('hidden'); });
+                renderRainSetup(text);
+            } else if (mode === 'spotlight') {
+                ['controls-spotlight', 'btn-spotlight-skip'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('hidden'); });
+                renderSpotlightSetup(text);
+            } else if (mode === 'rhythm') {
+                slider.parentElement.classList.remove('hidden'); slider.value = 5; rhythmBPM = 60;
+                ['controls-rhythm', 'controls-rhythm-extra', 'btn-go', 'btn-pinyin'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('hidden'); });
+                renderRhythmSetup(text);
+            }
+        }
+
+        // --- Touch & Read Mode ---
+        function renderTouchSetup(text) {
+            const board = document.getElementById('game-board'); board.innerHTML = '';
+            board.className = 'notebook-paper p-6 flex flex-wrap justify-center content-start gap-y-4 w-full h-full';
+            const { pinyin } = pinyinPro;
+            text.split('\n').forEach(line => {
+                const div = document.createElement('div'); div.className = 'w-full text-center mb-6 leading-none';
+                line.split('').forEach(char => {
+                    const py = /[\u4e00-\u9fa5]/.test(char) ? pinyin(char) : '';
+                    const unit = document.createElement('div'); unit.className = 'char-unit';
+                    unit.innerHTML = `<div class="pinyin" style="visibility:hidden">${py}</div><div class="hanzi game-font">${char}</div>`;
+                    unit.onclick = () => {
+                        document.querySelectorAll('.touch-active').forEach(el => el.classList.remove('touch-active'));
+                        unit.classList.add('touch-active');
+                        if ('speechSynthesis' in window) {
+                            window.speechSynthesis.cancel();
+                            const u = new SpeechSynthesisUtterance(char);
+                            u.lang = 'zh-CN'; u.rate = 0.8;
+                            window.speechSynthesis.speak(u);
+                        }
+                    };
+                    div.appendChild(unit);
+                });
+                board.appendChild(div);
+            });
+        }
+
+        // --- Common Controls ---
+        function exitGame() {
+            stopAllGames();
+            document.getElementById('game-area').classList.add('hidden');
+            document.getElementById('step-input').classList.remove('hidden');
+            document.getElementById('step-mode').classList.remove('hidden');
+            const overlay = document.getElementById('action-overlay'); overlay.classList.remove('active'); overlay.style.display = 'none';
+            const btn = document.getElementById('btn-go'); if(btn) { btn.innerHTML = '<i class="fa-solid fa-play"></i> 开始'; btn.classList.replace('bg-red-500', 'bg-green-500'); }
+        }
+
+        function stopAllGames() { 
+            clearTimeout(vanishingTimer); clearTimeout(rhythmTimer); stopRainGame(); stopRhythmGame(); isRunning = false; 
+        }
+
+        function handleGoAction() { 
+            if (currentMode === 'vanishing') startVanishingSequence(); 
+            else if (currentMode === 'rain') toggleRainGame(); 
+            else if (currentMode === 'rhythm') toggleRhythmGame();
+        }
+
+        function handleSpeedChange(val) {
+            const v = parseInt(val);
+            if (currentMode === 'vanishing') vanishingIntervalMs = 2400 - (v * 200); 
+            else if (currentMode === 'rain') rainSpeed = v;
+            else if (currentMode === 'rhythm') rhythmBPM = 30 + (v - 1) * 20;
+        }
+
+        // --- SEN ---
+        function toggleZenMode() { document.body.classList.toggle('zen-mode'); const btn = document.getElementById('btn-zen'); if(document.body.classList.contains('zen-mode')) { btn.classList.add('bg-gray-800','text-white'); btn.classList.remove('bg-white/50','text-gray-400'); } else { btn.classList.remove('bg-gray-800','text-white'); btn.classList.add('bg-white/50','text-gray-400'); } }
+        function toggleDyslexiaMode() { document.body.classList.toggle('dyslexia-mode'); const btn = document.getElementById('btn-dyslexia'); if(document.body.classList.contains('dyslexia-mode')) { btn.classList.add('bg-orange-800','text-white'); btn.classList.remove('bg-white/50','text-gray-400'); } else { btn.classList.remove('bg-orange-800','text-white'); btn.classList.add('bg-white/50','text-gray-400'); } }
+
+        // --- Help/Export ---
+        function showHelp() {
+            const dialog = document.getElementById('help-dialog'); const content = document.getElementById('help-content'); let text = "";
+            switch(currentMode) {
+                case 'touch': text = "【点读模式】这是你的有声书。点击任意一个汉字，就能听到它的读音，并看到拼音哦！"; break;
+                case 'vanishing': text = "【消失模式】点击“开始”，汉字会慢慢消失。请抓紧时间，在它们不见之前大声读出来！"; break;
+                case 'emoji': text = "【Emoji 猜字】看图猜汉字！点击表情图标，它就会变回原来的汉字。"; break;
+                case 'puzzle': text = "【句子拼图】请把散乱的字块填入格子里，连成一句通顺的话。"; break;
+                case 'rain': text = "【拼音接雨】看屏幕下方提示的拼音（如 'huā'），然后在天空中找到对应的汉字'花'并点击它。"; break;
+                case 'spotlight': text = "【聚光灯】汉字变成了云朵。系统会随机照亮一朵云，请大声读出那个发光的字，然后点击它。"; break;
+                case 'rhythm': text = "【节奏弹球】卡拉OK时间！点击开始，小球会在汉字上方跳动。每读完一行，会有动作提示（如拍手），请大家跟着一起做！"; break;
+                default: text = "请先选择一个好玩的游戏模式吧！";
+            }
+            content.textContent = text; dialog.showModal();
+        }
+        function toggleHelpAudio() { if (window.speechSynthesis.speaking) window.speechSynthesis.cancel(); else { const text = document.getElementById('help-content').textContent; helpUtterance = new SpeechSynthesisUtterance(text); helpUtterance.lang = 'zh-CN'; window.speechSynthesis.speak(helpUtterance); } }
+        function closeHelp() { window.speechSynthesis.cancel(); document.getElementById('help-dialog').close(); }
+        function downloadWorksheet() { const element = document.getElementById("game-container-wrapper"); const originalBg = element.style.background; element.style.background = "#ffffff"; html2canvas(element, { scale: 2 }).then(canvas => { const link = document.createElement('a'); link.download = `魔法阅读练习单.png`; link.href = canvas.toDataURL(); link.click(); element.style.background = originalBg; }).catch(err => alert("下载失败")); }
+        function downloadAsWord() { const content = document.getElementById("game-board").innerHTML; const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'><head><meta charset='utf-8'><title>Doc</title></head><body>${content}</body></html>`; const blob = new Blob(['\ufeff', html], { type: 'application/msword' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `魔法阅读练习单.doc`; link.click(); }
+
+        // --- Vanishing Mode ---
+        function renderVanishing(text) {
+            const board = document.getElementById('game-board'); board.innerHTML = ''; board.className = 'notebook-paper p-6 flex flex-wrap justify-center content-start gap-y-4 w-full h-full';
+            const { pinyin } = pinyinPro;
+            text.split('\n').forEach(line => {
+                const div = document.createElement('div'); div.className = 'w-full text-center mb-6 leading-none';
+                line.split('').forEach(char => {
+                    const py = /[\u4e00-\u9fa5]/.test(char) ? pinyin(char) : '';
+                    const unit = document.createElement('div'); unit.className = 'char-unit target-char';
+                    unit.innerHTML = `<div class="pinyin" data-has-pinyin="${!!py}" style="visibility:${pinyinVisible?'visible':'hidden'}">${py}</div><div class="hanzi game-font">${char}</div>`;
+                    div.appendChild(unit);
+                });
+                board.appendChild(div);
+            });
+        }
+        function startVanishingSequence() {
+            const btn = document.getElementById('btn-go');
+            if(isRunning){ clearTimeout(vanishingTimer); isRunning=false; btn.innerHTML='<i class="fa-solid fa-play"></i> 开始'; btn.classList.replace('bg-red-500','bg-green-500'); document.querySelectorAll('.target-char').forEach(el=>el.classList.remove('vanished')); return; }
+            isRunning=true; btn.innerHTML='<i class="fa-solid fa-stop"></i> 停止'; btn.classList.replace('bg-green-500','bg-red-500');
+            let idx = 0; const targets = document.querySelectorAll('.target-char');
+            function nextFade() { if(!isRunning) return; if(idx >= targets.length) { clearTimeout(vanishingTimer); isRunning=false; btn.innerHTML='<i class="fa-solid fa-rotate-left"></i> 重来'; btn.classList.replace('bg-red-500','bg-yellow-500'); return; } const v = parseInt(document.getElementById('global-speed-slider').value); const currentDelay = 2400 - (v * 200); targets[idx].style.transitionDuration = `${currentDelay/1000}s`; targets[idx].classList.add('vanished'); idx++; vanishingTimer = setTimeout(nextFade, currentDelay); } nextFade();
+        }
+
+        // --- Emoji Mode ---
+        function renderEmoji(text) {
+            if (typeof text !== 'string' || !text) text = document.getElementById('text-input').value.trim(); if (!text) return; 
+            const board = document.getElementById('game-board'); board.innerHTML = ''; board.className = 'notebook-paper p-6 flex flex-wrap justify-center content-start gap-y-4 w-full h-full';
+            const { pinyin } = pinyinPro; const density = document.getElementById('emoji-slider').value;
+            const lines = text.split('\n');
+            lines.forEach(line => {
+                const div = document.createElement('div'); div.className = 'w-full text-center mb-8';
+                let i = 0;
+                while(i < line.length) {
+                    let match = null; let matchLen = 0;
+                    if (i + 1 < line.length) { const twoChars = line.substr(i, 2); if (emojiDict[twoChars]) { match = { text: twoChars, emoji: emojiDict[twoChars] }; matchLen = 2; } }
+                    if (!match) { const oneChar = line[i]; if (emojiDict[oneChar]) { match = { text: oneChar, emoji: emojiDict[oneChar] }; matchLen = 1; } }
+                    if (match) {
+                        const isE = (Math.random() * 100 < density); const s = document.createElement('span');
+                        if (isE) { s.className = 'emoji-item text-4xl mx-1 inline-block align-bottom'; s.textContent = match.emoji; const originalText = match.text; const originalPy = pinyin(match.text); const originalEmoji = match.emoji; s.onclick = function() { if (this.className.includes('emoji-item')) { this.innerHTML = `<ruby class="game-font">${originalText}<rt class="text-sm font-sans text-purple-500">${originalPy}</rt></ruby>`; this.className = 'revealed-text text-4xl mx-1 inline-block cursor-pointer align-bottom'; } else { this.textContent = originalEmoji; this.className = 'emoji-item text-4xl mx-1 inline-block align-bottom'; } }; } else { s.className = 'text-4xl mx-0.5 game-font text-gray-800 align-bottom'; s.textContent = match.text; }
+                        div.appendChild(s); i += matchLen;
+                    } else { const s = document.createElement('span'); s.className = 'text-4xl mx-0.5 game-font text-gray-800 align-bottom'; s.textContent = line[i]; div.appendChild(s); i++; }
+                }
+                board.appendChild(div);
+            });
+        }
+
+        // --- Puzzle ---
+        function initPuzzle(text) { const rawSentences = text.split(/[\n。！？!?]+/).map(s => s.trim()).filter(s => s.length > 1); if (rawSentences.length === 0) { alert("文字太短啦！"); exitGame(); return; } puzzleSentences = rawSentences; currentPuzzleIndex = 0; renderPuzzleRound(); }
+        function renderPuzzleRound() {
+            const board = document.getElementById('game-board'); board.className = 'p-6 flex flex-col items-center gap-y-8 w-full';
+            if (currentPuzzleIndex >= puzzleSentences.length) { board.innerHTML = `<div class="text-center mt-10"><h2 class="text-4xl text-green-500 cartoon-font mb-4">通关啦！🎉</h2><p>录一段音来庆祝吧！</p></div>`; document.getElementById('btn-next-puzzle').classList.add('hidden'); return; }
+            const sentence = puzzleSentences[currentPuzzleIndex]; const chars = sentence.split(''); const shuffled = chars.map((char, idx) => ({ char, id: idx })).sort(() => Math.random() - 0.5); currentPuzzleAnswer = []; document.getElementById('puzzle-progress').textContent = `${currentPuzzleIndex + 1} / ${puzzleSentences.length}`; board.innerHTML = '';
+            const slotContainer = document.createElement('div'); slotContainer.className = 'flex flex-wrap justify-center p-4 bg-orange-50 rounded-xl border-2 border-orange-200 min-h-[6rem] w-full'; slotContainer.id = 'puzzle-slots'; chars.forEach(() => { const slot = document.createElement('div'); slot.className = 'puzzle-slot text-3xl font-bold text-gray-300 cartoon-font'; slotContainer.appendChild(slot); }); board.appendChild(slotContainer);
+            const piecesContainer = document.createElement('div'); piecesContainer.className = 'flex flex-wrap justify-center gap-2'; shuffled.forEach((item, idx) => { const btn = document.createElement('button'); btn.className = 'puzzle-piece'; btn.textContent = item.char; btn.dataset.char = item.char; btn.dataset.originalId = item.id; const tag = document.createElement('div'); tag.className = 'puzzle-tag'; tag.textContent = idx + 1; btn.appendChild(tag); btn.onclick = () => handlePieceClick(btn, sentence); piecesContainer.appendChild(btn); }); board.appendChild(piecesContainer);
+        }
+        function handlePieceClick(btn, target) { if (btn.classList.contains('used')) return; const slots = document.getElementById('puzzle-slots').children; const nextSlotIndex = currentPuzzleAnswer.length; if (nextSlotIndex < slots.length) { const slot = slots[nextSlotIndex]; slot.textContent = btn.dataset.char; slot.classList.replace('text-gray-300', 'text-gray-800'); btn.classList.add('used'); currentPuzzleAnswer.push(btn.dataset.char); if (currentPuzzleAnswer.length === target.length) checkPuzzle(target); } }
+        function checkPuzzle(target) { if (currentPuzzleAnswer.join('') === target) document.querySelectorAll('.puzzle-piece').forEach(p => p.style.borderColor = '#22c55e'); else setTimeout(() => { alert("顺序不对哦，再试一次！"); currentPuzzleAnswer = []; renderPuzzleRound(); }, 500); }
+        function nextPuzzle() { currentPuzzleIndex++; renderPuzzleRound(); }
+
+        // --- Rain ---
+        function renderRainSetup(text) { const board = document.getElementById('game-board'); board.innerHTML = ''; board.className = 'relative w-full h-full min-h-[400px] overflow-hidden bg-sky-50'; const uniqueChars = [...new Set(text.replace(/[^\u4e00-\u9fa5]/g, '').split(''))]; rainWords = uniqueChars.length ? uniqueChars : ['雨', '水', '花', '草']; rainScore = 0; document.getElementById('rain-score').textContent = 0; document.getElementById('target-pinyin').textContent = "???"; const msg = document.createElement('div'); msg.className = 'absolute inset-0 flex items-center justify-center text-gray-400 font-bold text-xl pointer-events-none'; msg.innerHTML = '<div class="text-center">点击"开始"按钮<br>看拼音，找汉字！</div>'; msg.id = 'rain-msg'; board.appendChild(msg); }
+        function updateRainSpeed(val) { rainSpeed = parseInt(val); }
+        function toggleRainGame() { const btn = document.getElementById('btn-go'); if (isRunning) { stopRainGame(); btn.innerHTML = '<i class="fa-solid fa-play"></i> 开始'; btn.classList.replace('bg-red-500', 'bg-green-500'); } else { startRainGame(); btn.innerHTML = '<i class="fa-solid fa-stop"></i> 停止'; btn.classList.replace('bg-green-500', 'bg-red-500'); } }
+        function startRainGame() { isRunning = true; document.getElementById('rain-msg').style.display = 'none'; setNewRainTarget(); rainInterval = setInterval(spawnRainDrop, 1200); requestAnimationFrame(gameLoop); }
+        function gameLoop() { if (!isRunning) return; updateRainDrops(); animationFrameId = requestAnimationFrame(gameLoop); }
+        function stopRainGame() { isRunning = false; clearInterval(rainInterval); cancelAnimationFrame(animationFrameId); }
+        function setNewRainTarget() { if(!isRunning) return; const { pinyin } = pinyinPro; const char = rainWords[Math.floor(Math.random() * rainWords.length)]; const py = pinyin(char); currentRainTarget = { char, pinyin: py }; const targetEl = document.getElementById('target-pinyin'); targetEl.textContent = py; }
+        function spawnRainDrop() { const board = document.getElementById('game-board'); const maxLeft = board.clientWidth - 60; if(maxLeft <= 0) return; let char = (Math.random() < 0.4 && currentRainTarget) ? currentRainTarget.char : rainWords[Math.floor(Math.random() * rainWords.length)]; const drop = document.createElement('div'); drop.className = 'rain-drop text-5xl'; drop.textContent = char; drop.style.left = Math.floor(Math.random() * maxLeft) + 'px'; drop.style.top = '-60px'; drop.onmousedown = (e) => { e.stopPropagation(); catchRainDrop(drop); }; board.appendChild(drop); }
+        function updateRainDrops() { const drops = document.getElementsByClassName('rain-drop'); const h = document.getElementById('game-board').clientHeight; for (let i = drops.length - 1; i >= 0; i--) { const drop = drops[i]; if(drop.dataset.status === 'caught') continue; let top = parseFloat(drop.style.top || 0); top += rainSpeed; drop.style.top = top + 'px'; if (top > h) drop.remove(); } }
+        function catchRainDrop(drop) { if(drop.dataset.status) return; if (drop.textContent === currentRainTarget.char) { drop.dataset.status = 'caught'; drop.style.background = '#4ade80'; drop.style.color = 'white'; rainScore += 10; document.getElementById('rain-score').textContent = rainScore; setTimeout(() => drop.remove(), 200); setNewRainTarget(); } else { drop.classList.add('wrong-hit'); rainScore = Math.max(0, rainScore - 5); document.getElementById('rain-score').textContent = rainScore; } }
+
+        // --- Spotlight ---
+        function renderSpotlightSetup(text) { const board = document.getElementById('game-board'); board.innerHTML = ''; board.className = 'w-full h-full min-h-[450px] spotlight-container flex flex-wrap justify-center content-center gap-6 p-8'; const rawChars = text.replace(/[^\u4e00-\u9fa5]/g, '').split(''); const charCounts = {}; const cleanChars = []; rawChars.forEach(char => { charCounts[char] = (charCounts[char] || 0) + 1; if (charCounts[char] <= 2) cleanChars.push(char); }); if(cleanChars.length === 0) { alert("没有汉字哦"); return; } cleanChars.slice(0, 24).forEach((char, idx) => { const cloud = document.createElement('div'); cloud.className = 'cloud-char'; const span = document.createElement('span'); span.className = 'cloud-text'; span.textContent = char; cloud.appendChild(span); cloud.dataset.id = idx; cloud.style.animationDelay = (Math.random() * 5) + 's'; cloud.onclick = () => handleSpotlightClick(cloud); board.appendChild(cloud); }); setTimeout(nextSpotlightTarget, 1000); }
+        function nextSpotlightTarget() { const items = document.querySelectorAll('.cloud-char:not(.spotlight-done)'); if (currentSpotlightTarget) currentSpotlightTarget.classList.remove('spotlight-active'); if (items.length === 0) return; const rand = items[Math.floor(Math.random() * items.length)]; rand.classList.add('spotlight-active'); currentSpotlightTarget = rand; }
+        function handleSpotlightClick(el) { if (el === currentSpotlightTarget) { el.classList.remove('spotlight-active'); el.classList.add('spotlight-done'); setTimeout(nextSpotlightTarget, 500); } }
+
+        // --- Rhythm ---
+        function renderRhythmSetup(text) { const board = document.getElementById('game-board'); board.innerHTML = ''; board.className = 'notebook-paper p-6 flex flex-wrap justify-center content-start gap-y-4 w-full h-full'; const { pinyin } = pinyinPro; const lines = text.split('\n'); lines.forEach((line, lineIdx) => { const div = document.createElement('div'); div.className = 'w-full text-center mb-10 leading-none flex flex-wrap justify-center rhythm-line'; line.split('').forEach(char => { const py = /[\u4e00-\u9fa5]/.test(char) ? pinyin(char) : ''; const unit = document.createElement('div'); unit.className = 'char-unit rhythm-target'; unit.dataset.line = lineIdx; unit.innerHTML = `<div class="pinyin" style="visibility:${pinyinVisible?'visible':'hidden'}">${py}</div><div class="hanzi game-font">${char}</div>`; div.appendChild(unit); }); board.appendChild(div); }); document.getElementById('rhythm-ball').style.display = 'none'; }
+        function toggleRhythmGame() { const btn = document.getElementById('btn-go'); if(isRunning) { stopRhythmGame(); btn.innerHTML='<i class="fa-solid fa-play"></i> 开始'; btn.classList.replace('bg-red-500', 'bg-green-500'); } else { startRhythmGame(); btn.innerHTML='<i class="fa-solid fa-stop"></i> 停止'; btn.classList.replace('bg-green-500', 'bg-red-500'); } }
+        function startRhythmGame() { isRunning = true; rhythmIndex = 0; rhythmCurrentLine = 0; if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if(audioCtx.state === 'suspended') audioCtx.resume(); const ball = document.getElementById('rhythm-ball'); ball.style.display = 'block'; const targets = document.querySelectorAll('.rhythm-target .hanzi'); if(targets.length === 0) return; rhythmLoop(); }
+        function rhythmLoop() { if(!isRunning) return; const targets = document.querySelectorAll('.rhythm-target .hanzi'); if(rhythmIndex >= targets.length) { stopRhythmGame(); return; } const target = targets[rhythmIndex]; const parentUnit = target.parentElement; const targetLine = parseInt(parentUnit.dataset.line); if(actionBreakEnabled && rhythmIndex > 0 && targetLine > rhythmCurrentLine) { rhythmCurrentLine = targetLine; triggerActionBreak(); return; } if (!actionBreakEnabled) rhythmCurrentLine = targetLine; const rect = target.getBoundingClientRect(); const boardRect = document.getElementById('game-board').getBoundingClientRect(); const targetX = rect.left - boardRect.left + rect.width/2 - 12; const targetY = rect.top - boardRect.top - 60; const intervalMs = 60000 / rhythmBPM; const ball = document.getElementById('rhythm-ball'); ball.style.left = `${targetX}px`; ball.style.top = `${targetY}px`; ball.classList.remove('ball-jumping'); void ball.offsetWidth; ball.style.animationDuration = `${intervalMs/1000}s`; ball.classList.add('ball-jumping'); playRhythmSound(); targets.forEach(t => t.classList.remove('rhythm-hit')); target.classList.add('rhythm-hit'); rhythmIndex++; rhythmTimer = setTimeout(rhythmLoop, intervalMs); }
+        function triggerActionBreak() { clearTimeout(rhythmTimer); const overlay = document.getElementById('action-overlay'); const iconEl = document.getElementById('action-icon'); const textEl = document.getElementById('action-text'); const actions = [{ i: '👏', t: '拍拍手' }, { i: '🦶', t: '跺跺脚' }, { i: '🙋', t: '举起手' }, { i: '💃', t: '扭扭腰' }, { i: '🤫', t: '嘘~安静' }, { i: '🐸', t: '跳一跳' }]; const act = actions[Math.floor(Math.random() * actions.length)]; iconEl.textContent = act.i; textEl.textContent = act.t; overlay.classList.add('active'); setTimeout(() => { if(!isRunning) { overlay.classList.remove('active'); return; } overlay.classList.remove('active'); rhythmLoop(); }, 3000); }
+        function stopRhythmGame() { isRunning = false; clearTimeout(rhythmTimer); document.getElementById('rhythm-ball').style.display = 'none'; const overlay = document.getElementById('action-overlay'); overlay.classList.remove('active'); document.querySelectorAll('.rhythm-hit').forEach(t => t.classList.remove('rhythm-hit')); const btn = document.getElementById('btn-go'); if(btn) { btn.innerHTML = '<i class="fa-solid fa-play"></i> 开始'; btn.classList.replace('bg-red-500', 'bg-green-500'); } }
+        function toggleActionBreak() { actionBreakEnabled = !actionBreakEnabled; const btn = document.getElementById('btn-action-break'); if(actionBreakEnabled) { btn.classList.replace('bg-gray-400', 'bg-green-500'); btn.innerHTML = '<i class="fa-solid fa-person-running mr-1"></i> 动感: 开'; } else { btn.classList.replace('bg-green-500', 'bg-gray-400'); btn.innerHTML = '<i class="fa-solid fa-bed mr-1"></i> 动感: 关'; } }
+        function toggleRhythmSound() { rhythmSoundType = (rhythmSoundType + 1) % 4; const btn = document.getElementById('btn-rhythm-sound'); const icons = ['fa-music', 'fa-drum', 'fa-hand-sparkles', 'fa-bell']; btn.innerHTML = `<i class="fa-solid ${icons[rhythmSoundType]}"></i>`; playRhythmSound(); }
+        function playRhythmSound() { if(!audioCtx) return; const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination); const now = audioCtx.currentTime; switch(rhythmSoundType) { case 0: osc.type = 'sine'; osc.frequency.setValueAtTime(800, now); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1); osc.start(now); osc.stop(now + 0.1); break; case 1: osc.type = 'sine'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.5); gain.gain.setValueAtTime(1.0, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5); osc.start(now); osc.stop(now + 0.5); break; case 2: osc.type = 'triangle'; osc.frequency.setValueAtTime(2000, now); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05); osc.start(now); osc.stop(now + 0.05); break; case 3: osc.type = 'sine'; osc.frequency.setValueAtTime(1200, now); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5); osc.start(now); osc.stop(now + 1.5); break; } }
+        function togglePinyin(){ pinyinVisible=!pinyinVisible; document.querySelectorAll('.pinyin').forEach(el=>{ if(el.innerText) el.style.visibility=pinyinVisible?'visible':'hidden'; }); }
+        function toggleRecord() { const btn = document.getElementById('btn-record'); if(!isRecording) { try { navigator.mediaDevices.getUserMedia({audio:true}).then(s => { mediaRecorder=new MediaRecorder(s); audioChunks=[]; mediaRecorder.ondataavailable=e=>audioChunks.push(e.data); mediaRecorder.onstop=()=>{const b=new Blob(audioChunks,{type:'audio/wav'}); document.getElementById('audio-player').src=URL.createObjectURL(b); document.getElementById('audio-container').classList.remove('hidden');}; mediaRecorder.start(); isRecording=true; btn.classList.add('bg-red-500','text-white','animate-pulse'); btn.innerHTML='<i class="fa-solid fa-stop"></i>'; }); } catch(e){alert("请允许麦克风权限");} } else { mediaRecorder.stop(); isRecording=false; btn.classList.remove('bg-red-500','text-white','animate-pulse'); btn.innerHTML='<i class="fa-solid fa-microphone"></i>'; } }
+    </script>
+</body>
+</html>
